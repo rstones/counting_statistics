@@ -44,8 +44,8 @@ class FCSSolver(LindbladSystem):
     '''
     
     def __init__(self, H, D_ops, D_rates, jump_idx, reduce_dim=False):
-        self.watch_variables = ['H', 'D_ops', 'D_rates', 'jump_idx', 'reduce_dim'] # could get this with inspect
-        self.cache_is_stale = True
+        self.__watch_variables = ['H', 'D_ops', 'D_rates', 'jump_idx', 'reduce_dim'] # could get this with inspect
+        self.__cache_is_stale = True
         
         LindbladSystem.__init__(self, H, D_ops, D_rates, reduce_dim=reduce_dim)
         self.jump_idx = jump_idx
@@ -53,10 +53,11 @@ class FCSSolver(LindbladSystem):
     def __setattr__(self, name, value):
         '''Overloaded to listen on selected variable so cache can be refreshed.'''
         try:
-            if name in self.watch_variables:
-                self.cache_is_stale = True
+            if name in self.__watch_variables:
+                self.__cache_is_stale = True
         except AttributeError:
-            # stop an Error being thrown when self.watch_variables is first created on class instantiation
+            # stop an Error being thrown when self.__watch_variables is first created on class instantiation
+            # maybe throw a warning here?
             pass
         object.__setattr__(self, name, value)
         
@@ -66,7 +67,7 @@ class FCSSolver(LindbladSystem):
         self.L = self.liouvillian()
         self.ss = self.stationary_state(self.L)
         self.jump_op = self.construct_jump_operator()
-        self.cache_is_stale = False
+        self.__cache_is_stale = False
             
     def construct_jump_operator(self):
         '''Sum kron(A,A) of all jump_ops.'''
@@ -81,13 +82,7 @@ class FCSSolver(LindbladSystem):
                 self.idx_to_remove = self.indices_to_remove(self.liouvillian())
         return jump_op
     
-    def stationary_state(self, L):
-        '''Will implement caching of stationary state here.
-        Check if class attributes have changed since last calculation and if so
-        recalculate stationary state, otherwise return cached stationary state.
-        '''
-        # check for class attributes update and get from cache else recalculate
-        
+    def stationary_state(self, L):        
         # calculate
         u,s,v = la.svd(L)
         # check for number of nullspaces
@@ -97,21 +92,23 @@ class FCSSolver(LindbladSystem):
         return ss
     
     def mean(self):
-        if self.cache_is_stale:
+        if self.__cache_is_stale:
             self.refresh_cache()
         return np.real(np.dot(self.pops, np.dot(self.jump_op, self.ss)))
     
     def noise(self, freq):
-        if self.cache_is_stale:
+        if self.__cache_is_stale:
             self.refresh_cache()
         
+        # handle either array or scalar freq values
         scalar = False
         if np.isscalar(freq):
             scalar = True
             freq = np.array([freq])
         elif isinstance(freq, list):
             freq = np.array(freq)
-
+            
+        # do the calculation
         Q = np.eye(self.L.shape[0]) - np.outer(self.ss, self.pops)
         noise = np.zeros(freq.size, dtype='float64')
         for i in range(len(freq)):
@@ -123,7 +120,7 @@ class FCSSolver(LindbladSystem):
         return noise[0] if scalar else noise
     
     def skewness(self, freq_range_1, freq_range_2):
-        if self.cache_is_stale:
+        if self.__cache_is_stale:
             self.refresh_cache()
     
     def second_order_fano_factor(self, freq):
