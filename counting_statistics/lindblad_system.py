@@ -1,7 +1,7 @@
 import numpy as np
 from counting_statistics.physicality_error import PhysicalityError
 
-class LindbladSystem():
+class LindbladSystem(object):
     '''Class to construct a Liouville space operator representation of a Lindblad master equation.'''
     
     def __init__(self, system_hamiltonian, lindblad_operators, lindblad_rates, reduce_dim=False):
@@ -42,10 +42,10 @@ class LindbladSystem():
         to the dynamics of coherences that are decoupled from populations. Also removes
         elements from self.pops to keep dimensions consistent.
         '''
-        idx_to_remove = self.indices_to_remove(L)
-        L = np.delete(L, idx_to_remove, 0)
-        L = np.delete(L, idx_to_remove, 1)
-        self.pops = np.delete(self.pops, idx_to_remove, 0)
+        self.idx_to_remove = self.indices_to_remove(L)
+        L = np.delete(L, self.idx_to_remove, 0)
+        L = np.delete(L, self.idx_to_remove, 1)
+        self.pops = np.delete(self.pops, self.idx_to_remove, 0)
         return L
     
     def indices_to_remove(self, L):

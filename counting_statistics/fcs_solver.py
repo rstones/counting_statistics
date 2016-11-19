@@ -1,10 +1,17 @@
 import numpy as np
+import numpy.linalg as npla
+import scipy.linalg as la
 from counting_statistics.lindblad_system import LindbladSystem
+from counting_statistics import optimized_funcs
 
 class FCSSolver(LindbladSystem):
     '''
     Users should be able to create a FCSSolver instance with the system Hamiltonian,
     Lindblad operators, somehow define the counting operators and associated rates.
+    
+    I also will need to effectively overload the __init__ function so users can provide
+    a liouvillian and jump_op directly. Use @classmethod to overload constructor (sort of)
+    See http://stackoverflow.com/questions/12179271/python-classmethod-and-staticmethod-for-beginner
     
     Functions: mean, zero_freq_noise, zero_freq_skewness, zero_freq_F2, zero_freq_F3,
     finite_freq_noise, finite_freq_skewness, finite_freq_F2, finite_freq_F3
@@ -36,33 +43,91 @@ class FCSSolver(LindbladSystem):
     on the heom_solver package I will write)
     '''
     
-    def __init__(self, system_hamiltonian, lindblad_operators, lindblad_rates, jump_idx, reduce_dim=False):
-        self.jump_idx = jump_idx
-        LindbladSystem.__init__(self, system_hamiltonian, lindblad_operators, lindblad_rates, reduce_dim=reduce_dim)
+    def __init__(self, H, D_ops, D_rates, jump_idx, reduce_dim=False):
+        self.watch_variables = ['H', 'D_ops', 'D_rates', 'jump_idx', 'reduce_dim'] # could get this with inspect
+        self.cache_is_stale = True
         
-    def stationary_state(self):
-        pass
+        LindbladSystem.__init__(self, H, D_ops, D_rates, reduce_dim=reduce_dim)
+        self.jump_idx = jump_idx
     
-    def mean(self):
-        ss = self.stationary_state(self.liouvillian())
-        # sum kron(A,A) of all jump_ops, there should be single row with some non-zero elements
+    def __setattr__(self, name, value):
+        '''Overloaded to listen on selected variable so cache can be refreshed.'''
+        try:
+            if name in self.watch_variables:
+                self.cache_is_stale = True
+        except AttributeError:
+            # stop an Error being thrown when self.watch_variables is first created on class instantiation
+            pass
+        object.__setattr__(self, name, value)
+        
+    def refresh_cache(self):
+        '''Refresh necessary quantities for counting statistics calculations.'''
+        self.pops = self.I.flatten()
+        self.L = self.liouvillian()
+        self.ss = self.stationary_state(self.L)
+        self.jump_op = self.construct_jump_operator()
+        self.cache_is_stale = False
+            
+    def construct_jump_operator(self):
+        '''Sum kron(A,A) of all jump_ops.'''
         jump_op = np.zeros((self.sys_dim**2, self.sys_dim**2))
         for i in np.flatnonzero(self.jump_idx):
-            jump_op += np.kron(self.D_ops[i], self.D_ops[i])
-        # find nonzero row
-        idx = np.nonzero(jump_op)
-        if not np.array_equal(idx[0], idx[0]):
-            raise ValueError("Jump operators represent transitions to more than one state. This is not currently supported.")
-        return np.dot(self.jump_idx*self.lindblad_rates, jump_op[idx[0][0]]*ss)
+            jump_op += self.D_rates[i] * np.kron(self.D_ops[i], self.D_ops[i])
+        if self.reduce_dim:
+            try:
+                jump_op = np.delete(jump_op, self.idx_to_remove, 0)
+                jump_op = np.delete(jump_op, self.idx_to_remove, 1)
+            except AttributeError:
+                self.idx_to_remove = self.indices_to_remove(self.liouvillian())
+        return jump_op
     
-    def noise(self, freq_range):
-        ss = self.stationary_state(self.liouvillian())
+    def stationary_state(self, L):
+        '''Will implement caching of stationary state here.
+        Check if class attributes have changed since last calculation and if so
+        recalculate stationary state, otherwise return cached stationary state.
+        '''
+        # check for class attributes update and get from cache else recalculate
+        
+        # calculate
+        u,s,v = la.svd(L)
+        # check for number of nullspaces
+        # normalize
+        ss = v[-1] / np.dot(self.pops, v[-1]) # i may need to .conj() v[-1] to get correct coherences
+        # cache 
+        return ss
+    
+    def mean(self):
+        if self.cache_is_stale:
+            self.refresh_cache()
+        return np.real(np.dot(self.pops, np.dot(self.jump_op, self.ss)))
+    
+    def noise(self, freq):
+        if self.cache_is_stale:
+            self.refresh_cache()
+        
+        scalar = False
+        if np.isscalar(freq):
+            scalar = True
+            freq = np.array([freq])
+        elif isinstance(freq, list):
+            freq = np.array(freq)
+
+        Q = np.eye(self.L.shape[0]) - np.outer(self.ss, self.pops)
+        noise = np.zeros(freq.size, dtype='float64')
+        for i in range(len(freq)):
+            R_plus = np.dot(Q, np.dot(npla.pinv(1.j*freq[i]*np.eye(self.L.shape[0])-self.L), Q))
+            R_minus = np.dot(Q, np.dot(npla.pinv(-1.j*freq[i]*np.eye(self.L.shape[0])-self.L), Q))
+            noise[i] = np.dot(self.pops, np.dot(self.jump_op, self.ss)) \
+                            + np.dot(self.pops, np.dot(np.dot(np.dot(self.jump_op, R_plus), self.jump_op) \
+                                                       + np.dot(np.dot(self.jump_op, R_minus), self.jump_op), self.ss))
+        return noise[0] if scalar else noise
     
     def skewness(self, freq_range_1, freq_range_2):
-        pass
+        if self.cache_is_stale:
+            self.refresh_cache()
     
-    def second_order_fano_factor(self, freq_range):
-        return self.noise(freq_range) / self.mean()
+    def second_order_fano_factor(self, freq):
+        return self.noise(freq) / self.mean()
     
     def third_order_fano_factor(self, freq_range_1, freq_range_2):
         return self.skewness(freq_range_1, freq_range_2) / self.mean()
