@@ -13,6 +13,8 @@ class FCSSolver(LindbladSystem):
     a liouvillian and jump_op directly. Use @classmethod to overload constructor (sort of)
     See http://stackoverflow.com/questions/12179271/python-classmethod-and-staticmethod-for-beginner
     
+    NEED TO MAKE COMPATIBLE WITH PYTHON 2 AND 3!
+    
     Functions: mean, zero_freq_noise, zero_freq_skewness, zero_freq_F2, zero_freq_F3,
     finite_freq_noise, finite_freq_skewness, finite_freq_F2, finite_freq_F3
     
@@ -51,7 +53,7 @@ class FCSSolver(LindbladSystem):
         self.jump_idx = jump_idx
     
     def __setattr__(self, name, value):
-        '''Overloaded to listen on selected variable so cache can be refreshed.'''
+        '''Overridden to watch selected variables to trigger cache refresh.'''
         try:
             if name in self.__watch_variables:
                 self.__cache_is_stale = True
@@ -110,14 +112,14 @@ class FCSSolver(LindbladSystem):
             
         # do the calculation
         Q = np.eye(self.L.shape[0]) - np.outer(self.ss, self.pops)
-        noise = np.zeros(freq.size, dtype='float64')
+        noise = np.zeros(freq.size, dtype='complex128')
         for i in range(len(freq)):
             R_plus = np.dot(Q, np.dot(npla.pinv(1.j*freq[i]*np.eye(self.L.shape[0])-self.L), Q))
             R_minus = np.dot(Q, np.dot(npla.pinv(-1.j*freq[i]*np.eye(self.L.shape[0])-self.L), Q))
             noise[i] = np.dot(self.pops, np.dot(self.jump_op, self.ss)) \
                             + np.dot(self.pops, np.dot(np.dot(np.dot(self.jump_op, R_plus), self.jump_op) \
                                                        + np.dot(np.dot(self.jump_op, R_minus), self.jump_op), self.ss))
-        return noise[0] if scalar else noise
+        return np.real(noise[0] if scalar else noise)
     
     def skewness(self, freq_range_1, freq_range_2):
         if self.__cache_is_stale:
