@@ -13,8 +13,8 @@ def setup_srl_system(Gamma_L, Gamma_R, reduce_dim):
 def setup_dqd_system(bias, T_c, Gamma_L, Gamma_R, reduce_dim):
     '''Instantiates LindbladSystem for double quantum dot model'''
     H = np.array([[0, 0, 0],
-                  [0, -bias/2., T_c],
-                  [0, T_c, bias/2.]])
+                  [0, bias/2., T_c],
+                  [0, T_c, -bias/2.]])
     ops = np.array([np.array([[0, 0, 0],[1., 0, 0],[0, 0, 0]]), np.array([[0, 0, 1.],[0, 0, 0],[0, 0, 0]])])
     rates = np.array([Gamma_L, Gamma_R])
     return LindbladSystem(H, ops, rates, reduce_dim=reduce_dim)
@@ -26,8 +26,8 @@ def reduced_srl_liouvillian(Gamma_L, Gamma_R):
 def reduced_dqd_liouvillian(bias, Tc, Gamma_L, Gamma_R):
     return np.array([[-Gamma_L, 0, 0, 0, Gamma_R],
                      [Gamma_L, 0, Tc*1.j, -Tc*1.j, 0],
-                     [0, Tc*1.j, -Gamma_R/2.+bias*1.j, 0, -Tc*1.j],
-                     [0, -Tc*1.j, 0, -Gamma_R/2.-bias*1.j, Tc*1.j],
+                     [0, Tc*1.j, -Gamma_R/2.-bias*1.j, 0, -Tc*1.j],
+                     [0, -Tc*1.j, 0, -Gamma_R/2.+bias*1.j, Tc*1.j],
                      [0, 0, -Tc*1.j, Tc*1.j, -Gamma_R]])
     
 def mean_srl(Gamma_L, Gamma_R):
@@ -62,3 +62,14 @@ def finite_freq_F2(freq, liouvillian, jump_op):
         if np.abs(evals[i]) < 1.e-7: continue # don't include zero eigenvalues in sum
         F2 -= 2. *  (c[i,i]*evals[i] / (freq**2 + evals[i]**2))
     return np.real(F2)
+
+def skewness_srl(freq1, freq2, Gamma_L, Gamma_R):
+    F3 = np.zeros((freq1.size, freq2.size))
+    for i in range(freq1.size):
+        for j in range(freq2.size):
+            F3[i,j] = 1. - 2. * Gamma_L * Gamma_R * (((Gamma_L**2 + Gamma_R**2 + freq1[i]**2 - freq1[i]*freq2[j] + freq2[j]**2) \
+                                                      * (3.*(Gamma_L + Gamma_R)**2 + freq1[i]**2 - freq1[i]*freq2[j] + freq2[j]**2)) \
+                                                     / (((Gamma_L + Gamma_R)**2 + freq1[i]**2) \
+                                                        * ((Gamma_L + Gamma_R)**2 + freq2[j]**2) \
+                                                        * ((Gamma_L + Gamma_R)**2 + (freq1[i]-freq2[j])**2)))
+    return F3

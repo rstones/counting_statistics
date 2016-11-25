@@ -40,7 +40,7 @@ class FCSSolverTestCase(unittest.TestCase):
     def test_finite_freq_F2_srl(self):
         '''Functionality test for second order Fano factor using SRL model with an array of frequencies.'''
         Gamma_R = 0.5; Gamma_L = 1.
-        freq = np.linspace(0,10,1000)
+        freq = np.linspace(0,10,100)
         srl_liouvillian = utils.reduced_srl_liouvillian(Gamma_L, Gamma_R)
         srl_jump_op = np.array([[0, Gamma_R],[0, 0]])
         expected_F2 = utils.finite_freq_F2(freq, srl_liouvillian, srl_jump_op)
@@ -50,13 +50,21 @@ class FCSSolverTestCase(unittest.TestCase):
     def test_finite_freq_F2_dqd(self):
         '''Functionality test for second order Fano factor using DQD model with an array of frequencies.'''
         Gamma_L = 1.; Gamma_R = 0.5; Tc = 3.; bias = 1.
-        freq = np.linspace(0,10,1000)
+        freq = np.linspace(0,10,100)
         dqd_liouvillian = utils.reduced_dqd_liouvillian(bias, Tc, Gamma_L, Gamma_R)
         dqd_jump_op = np.zeros((5,5))
         dqd_jump_op[0,4] = Gamma_R
         expected_F2 = utils.finite_freq_F2(freq, dqd_liouvillian, dqd_jump_op)
-        dqd_solver = utils.setup_dqd_solver(Gamma_L, Gamma_R, Tc, bias)
+        dqd_solver = utils.setup_dqd_solver(Gamma_L, Gamma_R, Tc, bias)        
         npt.assert_allclose(expected_F2, dqd_solver.second_order_fano_factor(freq))
+        
+    def test_finite_freq_F3_srl(self):
+        Gamma_L = 1.; Gamma_R = 1.
+        freq1 = np.linspace(1,5,10)
+        freq2 = np.linspace(6,10,10)
+        expected_F3 = utils.skewness_srl(freq1, freq2, Gamma_L, Gamma_R)
+        srl_solver = utils.setup_srl_solver(Gamma_L, Gamma_R)
+        npt.assert_allclose(expected_F3, srl_solver.third_order_fano_factor(freq1, freq2))
     
     def test_setattr(self):
         '''Testing overidden __setattr__ function in FCSSolver which changes __cache_is_stale flag.'''

@@ -67,7 +67,7 @@ class FCSSolver(LindbladSystem):
         '''Refresh necessary quantities for counting statistics calculations.'''
         self.pops = self.I.flatten()
         self.L = self.liouvillian()
-        self.ss = self.stationary_state(self.L)
+        self.ss = self.stationary_state(self.L, self.pops)
         self.jump_op = self.construct_jump_operator()
         self.__cache_is_stale = False
             
@@ -84,19 +84,23 @@ class FCSSolver(LindbladSystem):
                 self.idx_to_remove = self.indices_to_remove(self.liouvillian())
         return jump_op
     
-    def stationary_state(self, L):        
+    @staticmethod
+    def stationary_state(L, pops):        
         # calculate
         u,s,v = la.svd(L)
         # check for number of nullspaces
         # normalize
-        ss = v[-1] / np.dot(self.pops, v[-1]) # i may need to .conj() v[-1] to get correct coherences
-        # cache 
+        ss = v[-1].conj() / np.dot(pops, v[-1]) # i may need to .conj() v[-1] to get correct coherences
         return ss
     
     def mean(self):
         if self.__cache_is_stale:
             self.refresh_cache()
         return np.real(np.dot(self.pops, np.dot(self.jump_op, self.ss)))
+    
+    @staticmethod
+    def pseudoinverse(L, freq, Q):
+        return np.dot(Q, np.dot(npla.pinv(1.j*freq*np.eye(L.shape[0]) - L), Q))
     
     def noise(self, freq):
         if self.__cache_is_stale:
@@ -114,19 +118,43 @@ class FCSSolver(LindbladSystem):
         Q = np.eye(self.L.shape[0]) - np.outer(self.ss, self.pops)
         noise = np.zeros(freq.size, dtype='complex128')
         for i in range(len(freq)):
-            R_plus = np.dot(Q, np.dot(npla.pinv(1.j*freq[i]*np.eye(self.L.shape[0])-self.L), Q))
-            R_minus = np.dot(Q, np.dot(npla.pinv(-1.j*freq[i]*np.eye(self.L.shape[0])-self.L), Q))
-            noise[i] = np.dot(self.pops, np.dot(self.jump_op, self.ss)) \
-                            + np.dot(self.pops, np.dot(np.dot(np.dot(self.jump_op, R_plus), self.jump_op) \
-                                                       + np.dot(np.dot(self.jump_op, R_minus), self.jump_op), self.ss))
+            R_plus = self.pseudoinverse(self.L, freq[i], Q)
+            R_minus = self.pseudoinverse(self.L, -freq[i], Q)
+            noise[i] = np.dot(self.pops, np.dot(self.jump_op \
+                            + np.dot(np.dot(self.jump_op, R_plus), self.jump_op) \
+                                        + np.dot(np.dot(self.jump_op, R_minus), self.jump_op), self.ss))
         return np.real(noise[0] if scalar else noise)
     
-    def skewness(self, freq_range_1, freq_range_2):
+    def skewness(self, freq1, freq2):
         if self.__cache_is_stale:
             self.refresh_cache()
-    
+            
+        Q = np.eye(self.L.shape[0]) - np.outer(self.ss, self.pops)
+        skewness = np.zeros((freq1.size, freq2.size), dtype='complex128')
+        for i in range(len(freq1)):
+            for j in range(len(freq2)):
+                R1 = self.pseudoinverse(self.L, -freq1[i], Q)
+                R2 = self.pseudoinverse(self.L, freq1[i]-freq2[j], Q)
+                R3 = self.pseudoinverse(self.L, freq2[j], Q)
+                R4 = self.pseudoinverse(self.L, -freq2[j], Q)
+                R5 = self.pseudoinverse(self.L, freq1[i], Q)
+                R6 = self.pseudoinverse(self.L, freq2[j]-freq1[i], Q)
+                jump_op_average = np.dot(self.pops, np.dot(self.jump_op, self.ss))
+                y = self.jump_op \
+                        + np.dot(self.jump_op, np.dot(R1+R2+R3, self.jump_op)) \
+                        + np.dot(self.jump_op, np.dot(R4+R5+R6, self.jump_op)) \
+                        + np.dot(np.dot(self.jump_op, R1), np.dot(self.jump_op, np.dot(R4+R6, self.jump_op))) \
+                        + np.dot(np.dot(self.jump_op, R2), np.dot(self.jump_op, np.dot(R4+R5, self.jump_op))) \
+                        + np.dot(np.dot(self.jump_op, R3), np.dot(self.jump_op, np.dot(R5+R6, self.jump_op))) \
+                        + (-jump_op_average/(1.j*freq1[i])) * np.dot(self.jump_op, np.dot(R4-R2+R6-R3, self.jump_op)) \
+                        + (jump_op_average/(1.j*freq1[i]-1.j*freq2[j])) * np.dot(self.jump_op, np.dot(R4-R1+R5-R3, self.jump_op)) \
+                        + (jump_op_average/(1.j*freq2[j])) * np.dot(self.jump_op, np.dot(R2-R1+R5-R6, self.jump_op))
+                x = np.dot(y, self.ss)
+                skewness[i,j] = np.dot(self.pops, x)
+        return np.real(skewness)
+                
     def second_order_fano_factor(self, freq):
         return self.noise(freq) / self.mean()
     
-    def third_order_fano_factor(self, freq_range_1, freq_range_2):
-        return self.skewness(freq_range_1, freq_range_2) / self.mean()
+    def third_order_fano_factor(self, freq1, freq2):
+        return self.skewness(freq1, freq2) / self.mean()
