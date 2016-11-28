@@ -10,33 +10,19 @@ class FCSSolver(LindbladSystem):
     Lindblad operators, somehow define the counting operators and associated rates.
     
     I also will need to effectively overload the __init__ function so users can provide
-    a liouvillian and jump_op directly. Use @classmethod to overload constructor (sort of)
+    liouvillian, jump_op and pops directly. Use @classmethod to overload constructor (sort of)
     See http://stackoverflow.com/questions/12179271/python-classmethod-and-staticmethod-for-beginner
     
     NEED TO MAKE COMPATIBLE WITH PYTHON 2 AND 3!
     
-    Functions: mean, zero_freq_noise, zero_freq_skewness, zero_freq_F2, zero_freq_F3,
-    finite_freq_noise, finite_freq_skewness, finite_freq_F2, finite_freq_F3
-    
-    Class inherits from LindbladSystem which has the functionality to construct Liouvillian
-    matrix from Hilbert space operators. Also has functionality to reduce dimension of the problem
-    by removing equations of motion for coherences not coupled either directly or indirectly to 
-    population dynamics.
-    
     finite_freq functions can almost certainly be optimized with numba or cython, or at least the functions
     should be vectorized wrt the frequency values
-    
-    Implement caching of the steady state to save computation time. Before calculation of counting stats
-    check whether state (class attributes) has changed since last function call. If not then use cached steady state
-    otherwise calculate steady state again and cache it.
     
     This solver will be restricted to calculating full counting statistics for Markovian systems
     that can be expressing in Lindblad form with counting transitions occurring to a single state 
     (ie. a single drain lead in a standard electron transport setup, infinite voltage bias/unidirectional transport)
     
-    Need to provide docs with references.
-    
-    Code should test for things like physicality of Liouvillian, is Hamiltonian Hermitian, matrix dims consistent etc...
+    Need to provide docs with references and examples in juypter notebook hosted on github.
     
     Maybe implement non-Markovian counting stats at some point.
     
@@ -48,7 +34,7 @@ class FCSSolver(LindbladSystem):
     def __init__(self, H, D_ops, D_rates, jump_idx, reduce_dim=False):
         self.__watch_variables = ['H', 'D_ops', 'D_rates', 'jump_idx', 'reduce_dim'] # could get this with inspect
         self.__cache_is_stale = True
-        
+         
         LindbladSystem.__init__(self, H, D_ops, D_rates, reduce_dim=reduce_dim)
         self.jump_idx = jump_idx
     
@@ -67,8 +53,8 @@ class FCSSolver(LindbladSystem):
         '''Refresh necessary quantities for counting statistics calculations.'''
         self.pops = self.I.flatten()
         self.L = self.liouvillian()
-        self.ss = self.stationary_state(self.L, self.pops)
         self.jump_op = self.construct_jump_operator()
+        self.ss = self.stationary_state(self.L, self.pops)
         self.__cache_is_stale = False
             
     def construct_jump_operator(self):
@@ -133,6 +119,10 @@ class FCSSolver(LindbladSystem):
         skewness = np.zeros((freq1.size, freq2.size), dtype='complex128')
         for i in range(len(freq1)):
             for j in range(len(freq2)):
+                '''Currently ignoring zero-frequency limit as its a bit more complicated
+                than for the noise. This should cause a test failure until its fixed.'''
+                if freq1[i] == 0 or freq2[j] == 0 or freq1[i] == freq2[j]:
+                    continue
                 R1 = self.pseudoinverse(self.L, -freq1[i], Q)
                 R2 = self.pseudoinverse(self.L, freq1[i]-freq2[j], Q)
                 R3 = self.pseudoinverse(self.L, freq2[j], Q)
@@ -140,7 +130,7 @@ class FCSSolver(LindbladSystem):
                 R5 = self.pseudoinverse(self.L, freq1[i], Q)
                 R6 = self.pseudoinverse(self.L, freq2[j]-freq1[i], Q)
                 jump_op_average = np.dot(self.pops, np.dot(self.jump_op, self.ss))
-                y = self.jump_op \
+                skewness[i,j] = np.dot(self.pops, np.dot(self.jump_op \
                         + np.dot(self.jump_op, np.dot(R1+R2+R3, self.jump_op)) \
                         + np.dot(self.jump_op, np.dot(R4+R5+R6, self.jump_op)) \
                         + np.dot(np.dot(self.jump_op, R1), np.dot(self.jump_op, np.dot(R4+R6, self.jump_op))) \
@@ -148,9 +138,7 @@ class FCSSolver(LindbladSystem):
                         + np.dot(np.dot(self.jump_op, R3), np.dot(self.jump_op, np.dot(R5+R6, self.jump_op))) \
                         + (-jump_op_average/(1.j*freq1[i])) * np.dot(self.jump_op, np.dot(R4-R2+R6-R3, self.jump_op)) \
                         + (jump_op_average/(1.j*freq1[i]-1.j*freq2[j])) * np.dot(self.jump_op, np.dot(R4-R1+R5-R3, self.jump_op)) \
-                        + (jump_op_average/(1.j*freq2[j])) * np.dot(self.jump_op, np.dot(R2-R1+R5-R6, self.jump_op))
-                x = np.dot(y, self.ss)
-                skewness[i,j] = np.dot(self.pops, x)
+                        + (jump_op_average/(1.j*freq2[j])) * np.dot(self.jump_op, np.dot(R6-R1+R5-R2, self.jump_op)), self.ss))
         return np.real(skewness)
                 
     def second_order_fano_factor(self, freq):

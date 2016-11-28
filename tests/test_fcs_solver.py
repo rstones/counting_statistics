@@ -60,8 +60,8 @@ class FCSSolverTestCase(unittest.TestCase):
         
     def test_finite_freq_F3_srl(self):
         Gamma_L = 1.; Gamma_R = 1.
-        freq1 = np.linspace(1,5,10)
-        freq2 = np.linspace(6,10,10)
+        freq1 = np.linspace(-10,10,50)
+        freq2 = np.linspace(-10,10,50)
         expected_F3 = utils.skewness_srl(freq1, freq2, Gamma_L, Gamma_R)
         srl_solver = utils.setup_srl_solver(Gamma_L, Gamma_R)
         npt.assert_allclose(expected_F3, srl_solver.third_order_fano_factor(freq1, freq2))

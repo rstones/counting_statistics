@@ -67,9 +67,10 @@ def skewness_srl(freq1, freq2, Gamma_L, Gamma_R):
     F3 = np.zeros((freq1.size, freq2.size))
     for i in range(freq1.size):
         for j in range(freq2.size):
-            F3[i,j] = 1. - 2. * Gamma_L * Gamma_R * (((Gamma_L**2 + Gamma_R**2 + freq1[i]**2 - freq1[i]*freq2[j] + freq2[j]**2) \
-                                                      * (3.*(Gamma_L + Gamma_R)**2 + freq1[i]**2 - freq1[i]*freq2[j] + freq2[j]**2)) \
-                                                     / (((Gamma_L + Gamma_R)**2 + freq1[i]**2) \
-                                                        * ((Gamma_L + Gamma_R)**2 + freq2[j]**2) \
-                                                        * ((Gamma_L + Gamma_R)**2 + (freq1[i]-freq2[j])**2)))
+            F3[i,j] = 1. - 2. * Gamma_L * Gamma_R * \
+                                (((Gamma_L**2 + Gamma_R**2 + freq1[i]**2 - freq1[i]*freq2[j] + freq2[j]**2) \
+                                  * (3.*(Gamma_L + Gamma_R)**2 + freq1[i]**2 - freq1[i]*freq2[j] + freq2[j]**2)) \
+                                 / (((Gamma_L + Gamma_R)**2 + freq1[i]**2) \
+                                    * ((Gamma_L + Gamma_R)**2 + freq2[j]**2) \
+                                    * ((Gamma_L + Gamma_R)**2 + (freq1[i]-freq2[j])**2)))
     return F3
