@@ -15,6 +15,10 @@ class FCSSolver(LindbladSystem):
     
     NEED TO MAKE COMPATIBLE WITH PYTHON 2 AND 3!
     
+    For the zero-frequency cumulants, I can implement a recursive scheme to generate them to arbitrary
+    order following Flindt et al. 2010 (optimized using numba). Maybe worth still having up to skewness
+    hard coded for speed and ease of seeing the specific structure of those equations when reading the code.
+    
     finite_freq functions can almost certainly be optimized with numba or cython, or at least the functions
     should be vectorized wrt the frequency values
     
@@ -31,12 +35,33 @@ class FCSSolver(LindbladSystem):
     on the heom_solver package I will write)
     '''
     
-    def __init__(self, H, D_ops, D_rates, jump_idx, reduce_dim=False):
-        self.__watch_variables = ['H', 'D_ops', 'D_rates', 'jump_idx', 'reduce_dim'] # could get this with inspect
+#     def __init__(self, H, D_ops, D_rates, jump_idx, reduce_dim=False):
+#         self.__watch_variables = ['H', 'D_ops', 'D_rates', 'jump_idx', 'reduce_dim'] # could get this with inspect
+#         self.__cache_is_stale = True
+#          
+#         LindbladSystem.__init__(self, H, D_ops, D_rates, reduce_dim=reduce_dim)
+#         self.jump_idx = jump_idx
+
+    def __init__(self, time_generator, jump_op, pops, from_hilbert_space=False):
+        self.from_hilbert_space = from_hilbert_space
+        self.__watch_variables = ['H', 'D_ops', 'D_rates', 'jump_idx', 'reduce_dim'] \
+                                                if self.from_hilbert_space else ['L', 'jump_op', 'pops']
         self.__cache_is_stale = True
-         
-        LindbladSystem.__init__(self, H, D_ops, D_rates, reduce_dim=reduce_dim)
-        self.jump_idx = jump_idx
+        
+        # instantiate liouvillian and jump here
+        self.L = time_generator
+        self.jump_op = jump_op
+        self.pops = pops
+
+    @classmethod
+    def from_hilbert_space(cls, H, D_ops, D_rates, jump_idx, reduce_dim=False):
+        # construct L and jump_op then construct instance
+        instance = object.__new__(cls)
+        super(FCSSolver, instance).__init__(H, D_ops, D_rates, reduce_dim=reduce_dim)
+        instance.jump_idx = jump_idx
+        L = instance.liouvillian()
+        instance.__init__(L, instance.construct_jump_operator(L), instance.pops, from_hilbert_space=True)
+        return instance
     
     def __setattr__(self, name, value):
         '''Overridden to watch selected variables to trigger cache refresh.'''
@@ -51,13 +76,14 @@ class FCSSolver(LindbladSystem):
         
     def refresh_cache(self):
         '''Refresh necessary quantities for counting statistics calculations.'''
-        self.pops = self.I.flatten()
-        self.L = self.liouvillian()
-        self.jump_op = self.construct_jump_operator()
+        if self.from_hilbert_space:
+            self.pops = self.I.flatten()
+            self.L = self.liouvillian()
+            self.jump_op = self.construct_jump_operator(self.L)
         self.ss = self.stationary_state(self.L, self.pops)
         self.__cache_is_stale = False
-            
-    def construct_jump_operator(self):
+
+    def construct_jump_operator(self, L):
         '''Sum kron(A,A) of all jump_ops.'''
         jump_op = np.zeros((self.sys_dim**2, self.sys_dim**2))
         for i in np.flatnonzero(self.jump_idx):
@@ -67,11 +93,16 @@ class FCSSolver(LindbladSystem):
                 jump_op = np.delete(jump_op, self.idx_to_remove, 0)
                 jump_op = np.delete(jump_op, self.idx_to_remove, 1)
             except AttributeError:
-                self.idx_to_remove = self.indices_to_remove(self.liouvillian())
+                self.idx_to_remove = self.indices_to_remove(L)
+                jump_op = np.delete(jump_op, self.idx_to_remove, 0)
+                jump_op = np.delete(jump_op, self.idx_to_remove, 1)
         return jump_op
     
     @staticmethod
-    def stationary_state(L, pops):        
+    def stationary_state(L, pops):
+        '''Should test for number of nullspaces found somewhere, possibly here, as the system is set up
+        under the assumption it is fully connected and has a single stationary state.
+        Send a warning if there are multiple nullspaces.''' 
         # calculate
         u,s,v = la.svd(L)
         # check for number of nullspaces

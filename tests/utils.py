@@ -37,7 +37,7 @@ def zero_freq_F2_srl(Gamma_L, Gamma_R):
     return (Gamma_L**2 + Gamma_R**2) / (Gamma_L+Gamma_R)**2
 
 def setup_srl_solver(Gamma_L, Gamma_R):
-    return FCSSolver(np.array([[0,0],[0,0]]), [np.array([[0,1],[0,0]]), np.array([[0,0],[1,0]])], \
+    return FCSSolver.from_hilbert_space(np.array([[0,0],[0,0]]), [np.array([[0,1],[0,0]]), np.array([[0,0],[1,0]])], \
                                 [Gamma_R, Gamma_L], np.array([1,0]), reduce_dim=True)
     
 def mean_dqd(Gamma_L, Gamma_R, Tc, bias):
@@ -48,7 +48,7 @@ def zero_freq_F2_dqd(Gamma_L, Gamma_R, Tc, bias):
                 / (4.*Gamma_L*bias**2 + Gamma_L*Gamma_R**2 + 4.*Tc**2 * (2.*Gamma_L + Gamma_R))**2
     
 def setup_dqd_solver(Gamma_L, Gamma_R, Tc, bias):
-    return FCSSolver(np.array([[0,0,0],[0,bias/2.,Tc],[0,Tc,-bias/2.]]), \
+    return FCSSolver.from_hilbert_space(np.array([[0,0,0],[0,bias/2.,Tc],[0,Tc,-bias/2.]]), \
                      [np.array([[0,0,1.],[0,0,0],[0,0,0]]), np.array([[0,0,0],[1.,0,0],[0,0,0]])], \
                      [Gamma_R, Gamma_L], np.array([1,0]), reduce_dim=True)
     

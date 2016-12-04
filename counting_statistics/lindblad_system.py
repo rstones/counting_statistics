@@ -20,6 +20,13 @@ class LindbladSystem(object):
         
         self.reduce_dim = reduce_dim
     
+    @classmethod
+    def from_hilbert_space(cls, system_hamiltonian, lindblad_operators, lindblad_rates, reduce_dim=False):
+        # construct liouvillian and jump operator
+        
+        # return instance of the base and inheriting class
+        return cls()
+    
     def liouvillian(self):
         '''Constructs full Liouvillian of the system.'''
         L = -1.j * (np.kron(self.H, self.I) - np.kron(self.I, self.H)) + self.lindblad_dissipator()
@@ -76,7 +83,7 @@ class LindbladSystem(object):
         # convert back to single list of indices to keep
         indices_to_keep = [i for l in indices_to_keep for i in l]
         # return list of indices we now want to remove
-        return np.setdiff1d(range(self.pops.size), indices_to_keep)
+        return np.setdiff1d(range(len(self.pops)), indices_to_keep)
     
     @staticmethod
     def is_hermitian(A):

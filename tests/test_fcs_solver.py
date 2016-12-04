@@ -2,11 +2,11 @@ import unittest
 import numpy as np
 import numpy.testing as npt
 from tests import utils
-from counting_statistics.fcs_solver import FCSSolver
 
 class FCSSolverTestCase(unittest.TestCase):
     
     def test_stationary_state(self):
+        '''Test the conj bit as that was a bug I came across'''
         pass
     
     def test_mean_srl(self):
