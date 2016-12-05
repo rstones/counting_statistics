@@ -42,24 +42,25 @@ class FCSSolver(LindbladSystem):
 #         LindbladSystem.__init__(self, H, D_ops, D_rates, reduce_dim=reduce_dim)
 #         self.jump_idx = jump_idx
 
-    def __init__(self, time_generator, jump_op, pops, from_hilbert_space=False):
+    def __init__(self, L, jump_op, pops, from_hilbert_space=False):
+        self.L = L
+        self.jump_op = jump_op
+        self.pops = pops
+        
         self.from_hilbert_space = from_hilbert_space
         self.__watch_variables = ['H', 'D_ops', 'D_rates', 'jump_idx', 'reduce_dim'] \
                                                 if self.from_hilbert_space else ['L', 'jump_op', 'pops']
         self.__cache_is_stale = True
-        
-        # instantiate liouvillian and jump here
-        self.L = time_generator
-        self.jump_op = jump_op
-        self.pops = pops
 
     @classmethod
     def from_hilbert_space(cls, H, D_ops, D_rates, jump_idx, reduce_dim=False):
-        # construct L and jump_op then construct instance
+        # create instance of subclass
         instance = object.__new__(cls)
+        # initialize superclass first to allow construction of Liouvillian etc by LindbladSystem
         super(FCSSolver, instance).__init__(H, D_ops, D_rates, reduce_dim=reduce_dim)
         instance.jump_idx = jump_idx
         L = instance.liouvillian()
+        # initialize subclass
         instance.__init__(L, instance.construct_jump_operator(L), instance.pops, from_hilbert_space=True)
         return instance
     
