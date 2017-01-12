@@ -77,12 +77,31 @@ class FCSSolverTestCase(unittest.TestCase):
         npt.assert_allclose(expected_F2, dqd_solver.second_order_fano_factor(freq))
         
     def test_finite_freq_F3_srl(self):
-        Gamma_L = 1.; Gamma_R = 1.
+        Gamma_L = 1.; Gamma_R = 0.5
         freq1 = np.linspace(-10,10,50)
         freq2 = np.linspace(-10,10,50)
         expected_F3 = utils.skewness_srl(freq1, freq2, Gamma_L, Gamma_R)
         srl_solver = utils.setup_srl_solver_from_hilbert_space(Gamma_L, Gamma_R)
         npt.assert_allclose(expected_F3, srl_solver.third_order_fano_factor(freq1, freq2))
+        
+    def test_generate_cumulant_srl(self):
+        Gamma_R = 0.5; Gamma_L = 1.
+        expected_mean = utils.mean_srl(Gamma_L, Gamma_R)
+        expected_F2 = utils.zero_freq_F2_srl(Gamma_L, Gamma_R)
+        expected_F3 = utils.skewness_srl(0, 0, Gamma_L, Gamma_R)
+        srl_solver = utils.setup_srl_solver_from_hilbert_space(Gamma_L, Gamma_R)
+        self.assertAlmostEqual(expected_mean, srl_solver.generate_cumulant(1)[0][0])
+        self.assertAlmostEqual(expected_F2, srl_solver.generate_cumulant(2)[0][1])
+        self.assertAlmostEqual(expected_F3, srl_solver.generate_cumulant(3)[0][2])
+    
+    def test_generate_cumulant_dqd(self):
+        Gamma_L = 1.; Gamma_R = 0.5; Tc = 3.; bias = 1.
+        expected_mean = utils.mean_dqd(Gamma_L, Gamma_R, Tc, bias)
+        expected_F2 = utils.zero_freq_F2_dqd(Gamma_L, Gamma_R, Tc, bias)
+        dqd_solver = utils.setup_dqd_solver_from_hilbert_space(Gamma_L, Gamma_R, Tc, bias)
+        self.assertAlmostEqual(expected_mean, dqd_solver.generate_cumulant(1)[0][0])
+        self.assertAlmostEqual(expected_F2, dqd_solver.generate_cumulant(2)[0][1])
+        # test 3rd and 4th cumulants by analytically deriving them from characteristic polynomial
         
     def test_setattr_standard_constructor(self):
         '''Testing overidden __setattr__ function in FCSSolver which changes __cache_is_stale flag.'''

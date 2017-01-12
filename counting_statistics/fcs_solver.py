@@ -9,11 +9,9 @@ class FCSSolver(LindbladSystem):
     Users should be able to create a FCSSolver instance with the system Hamiltonian,
     Lindblad operators, somehow define the counting operators and associated rates.
     
-    I also will need to effectively overload the __init__ function so users can provide
-    liouvillian, jump_op and pops directly. Use @classmethod to overload constructor (sort of)
-    See http://stackoverflow.com/questions/12179271/python-classmethod-and-staticmethod-for-beginner
-    
     NEED TO MAKE COMPATIBLE WITH PYTHON 2 AND 3!
+
+    Also need to decide how to deal with numpy Matrix objects as well as ndarrays
     
     For the zero-frequency cumulants, I can implement a recursive scheme to generate them to arbitrary
     order following Flindt et al. 2010 (optimized using numba). Maybe worth still having up to skewness
@@ -108,7 +106,7 @@ class FCSSolver(LindbladSystem):
         u,s,v = la.svd(L)
         # check for number of nullspaces
         # normalize
-        ss = v[-1].conj() / np.dot(pops, v[-1]) # i may need to .conj() v[-1] to get correct coherences
+        ss = v[-1].conj() / np.dot(pops, v[-1])
         return ss
     
     def mean(self):
@@ -119,6 +117,10 @@ class FCSSolver(LindbladSystem):
     @staticmethod
     def pseudoinverse(L, freq, Q):
         return np.dot(Q, np.dot(npla.pinv(1.j*freq*np.eye(L.shape[0]) - L), Q))
+    
+    @staticmethod
+    def Q(L, steady_state, pops):
+        return np.eye(L.shape[0]) - np.outer(steady_state, pops)
     
     def noise(self, freq):
         if self.__cache_is_stale:
@@ -133,7 +135,7 @@ class FCSSolver(LindbladSystem):
             freq = np.array(freq)
             
         # do the calculation
-        Q = np.eye(self.L.shape[0]) - np.outer(self.ss, self.pops)
+        Q = self.Q(self.L, self.ss, self.pops)
         noise = np.zeros(freq.size, dtype='complex128')
         for i in range(len(freq)):
             R_plus = self.pseudoinverse(self.L, freq[i], Q)
@@ -147,7 +149,7 @@ class FCSSolver(LindbladSystem):
         if self.__cache_is_stale:
             self.refresh_cache()
             
-        Q = np.eye(self.L.shape[0]) - np.outer(self.ss, self.pops)
+        Q = self.Q(self.L, self.ss, self.pops)
         skewness = np.zeros((freq1.size, freq2.size), dtype='complex128')
         for i in range(len(freq1)):
             for j in range(len(freq2)):
@@ -178,3 +180,31 @@ class FCSSolver(LindbladSystem):
     
     def third_order_fano_factor(self, freq1, freq2):
         return self.skewness(freq1, freq2) / self.mean()
+    
+    def binomial_coefficient_vector(self, n):
+        '''Generates vector of binomial coefficients from m=1 to n.'''
+        return np.ones(n)
+    
+    def generate_cumulant(self, n):
+        '''Generates zero-frequency cumulant to arbitrary order using recursive scheme.'''
+        # check n is an integer
+        if n > 1:
+            # get previous cumulants and states
+            cumulants, states = self.generate_cumulant(n-1)
+        elif n == 1:
+            # lowest level cumulant
+            return [np.dot(self.pops, np.dot(self.jump_op, self.ss))], [self.ss]
+        else:
+            raise ValueError("Cannot calculate cumulants for n < 1")
+        # calculate cumulant at current level
+        bc_vector = self.binomial_coefficient_vector(n)
+        states.append(np.dot(self.pseudoinverse(self.L, 0, self.Q(self.L, self.ss, self.pops)), \
+                                    np.dot(bc_vector, np.dot(np.zeros(0)))))
+        # to calculate new state, need to use an outer operation (but for arrays greater than 1D) and
+        # something to stack jump_op into 3D array like
+        # np.dot(np.outer(np.eye(), np.array(cumulants)) - np.vstack/hstack((n lots of self.jump_op)), np.array(states).T)
+        cumulants.append(np.dot(bc_vector, \
+                                np.dot(np.dot(self.pops, np.dot(self.jump_op, np.array(states).T)))))
+        return cumulants, states
+            
+            
