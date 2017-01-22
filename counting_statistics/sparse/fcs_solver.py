@@ -51,7 +51,7 @@ class FCSSolver(object):
     
     @staticmethod
     def Q(L, steady_state, pops):
-        return sp.eye(L.shape[0]) - sp.csr_matrix(steady_state * pops.T)
+        return sp.eye(L.shape[0]) - sp.csr_matrix(steady_state) * sp.csr_matrix(pops.T)
     
     def zero_frequency_noise(self):
         if self.__cache_is_stale:
