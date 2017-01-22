@@ -100,7 +100,8 @@ class FCSSolverTestCase(unittest.TestCase):
         expected_F2 = utils.zero_freq_F2_dqd(Gamma_L, Gamma_R, Tc, bias)
         dqd_solver = utils.setup_dqd_solver_from_hilbert_space(Gamma_L, Gamma_R, Tc, bias)
         self.assertAlmostEqual(expected_mean, dqd_solver.generate_cumulant(1)[0][0])
-        self.assertAlmostEqual(expected_F2, dqd_solver.generate_cumulant(2)[0][1])
+        cumulants,states = dqd_solver.generate_cumulant(2)
+        self.assertAlmostEqual(expected_mean*expected_F2, cumulants[1])
         # test 3rd and 4th cumulants by analytically deriving them from characteristic polynomial
         
     def test_setattr_standard_constructor(self):

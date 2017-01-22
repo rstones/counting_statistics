@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.linalg as npla
 import scipy.linalg as la
+import scipy.special as sp
 from counting_statistics.lindblad_system import LindbladSystem
 from counting_statistics import optimized_funcs
 
@@ -181,30 +182,55 @@ class FCSSolver(LindbladSystem):
     def third_order_fano_factor(self, freq1, freq2):
         return self.skewness(freq1, freq2) / self.mean()
     
-    def binomial_coefficient_vector(self, n):
-        '''Generates vector of binomial coefficients from m=1 to n.'''
-        return np.ones(n)
+    def binom_coeff_vector(self, n):
+        '''Generates vector of binomial coefficients from m=1 to n, reversed.'''
+        return sp.binom(n, range(n,0,-1))
     
     def generate_cumulant(self, n):
-        '''Generates zero-frequency cumulant to arbitrary order using recursive scheme.'''
-        # check n is an integer
-        if n > 1:
-            # get previous cumulants and states
-            cumulants, states = self.generate_cumulant(n-1)
-        elif n == 1:
-            # lowest level cumulant
-            return [np.dot(self.pops, np.dot(self.jump_op, self.ss))], [self.ss]
-        else:
-            raise ValueError("Cannot calculate cumulants for n < 1")
-        # calculate cumulant at current level
-        bc_vector = self.binomial_coefficient_vector(n)
-        states.append(np.dot(self.pseudoinverse(self.L, 0, self.Q(self.L, self.ss, self.pops)), \
-                                    np.dot(bc_vector, np.dot(np.zeros(0)))))
-        # to calculate new state, need to use an outer operation (but for arrays greater than 1D) and
-        # something to stack jump_op into 3D array like
-        # np.dot(np.outer(np.eye(), np.array(cumulants)) - np.vstack/hstack((n lots of self.jump_op)), np.array(states).T)
-        cumulants.append(np.dot(bc_vector, \
-                                np.dot(np.dot(self.pops, np.dot(self.jump_op, np.array(states).T)))))
-        return cumulants, states
+        '''Generates zero-frequency cumulant to arbitrary order using recursive scheme.
+        
+        Also could use a function to generate next level of hierarchy from a previously
+        generated set of cumulants and states so don't need to start from the beginning
+        each time.
+        
+        It would also be cool to dynamically generate a function for the requested cumulant
+        which a user can save. Currently every time a parameter changes the cumulant needs to be regenerated which is 
+        probably going to be quite inefficient for large cumulants.'''
+        if self.__cache_is_stale:
+            self.refresh_cache()
+            
+        R = self.pseudoinverse(self.L, 0, self.Q(self.L, self.ss, self.pops))
+        bc_vector = self.binom_coeff_vector(n)
+        cumulants = np.zeros(n)
+        states = np.zeros((n+1, self.L.shape[0]), dtype='complex128')
+        states[0] = self.ss
+        
+        def recursion(m, cumulants, states):
+            # check n is an integer >= 1
+            if m > 1:
+                # get previous cumulants and states
+                cumulants, states = recursion(m-1, cumulants, states)
+            elif m == 1:
+                # lowest level cumulant
+                cumulants[0] =  np.dot(self.pops, np.dot(self.jump_op, states[0]))
+                states[1] = np.dot(R, np.dot(cumulants[0]*np.eye(self.L.shape[0]) - self.jump_op, states[0]))
+                #print states[1] + np.dot(R, np.dot(self.jump_op, states[0]))
+                return cumulants, states
+            else:
+                raise ValueError("Cannot calculate cumulants for n < 1")
+            # calculate cumulant at current level
+            #cumulants[m-1] = np.dot(self.pops, np.dot(self.jump_op, np.dot(bc_vector, states[:m])))
+            for i in range(m):
+                cumulants[m-1] += bc_vector[i]*np.dot(self.pops, np.dot(self.jump_op, states[i]))
+            # construct 3D matrix
+            #W = np.vstack([bc_vector[i]*(cumulants[i]*np.eye(self.L.shape[0]) - self.jump_op)[np.newaxis,...] for i in range(m)])
+            W = np.sum([np.dot(bc_vector[i]*(cumulants[i]*np.eye(self.L.shape[0]) - self.jump_op), states[i]) for i in range(m)], axis=0)
+            states[m] = np.dot(R, W)
+            return cumulants, states
+        
+        return recursion(n, cumulants, states)
+    
+    def generate_fano_factor(self, n):
+        return self.generate_cumulant(n)[0][n-1] / self.mean()
             
             
