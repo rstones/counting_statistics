@@ -57,7 +57,6 @@ class FCSSolver(object):
         Q is operator projecting onto space orthogonal to steady state
         y is vector or matrix being operated on by pseudoinverse'''
         result = spla.lgmres(L, Q.dot(y), tol=1.e-5, maxiter=10000)
-        print(result)
         return result[0] # spla.lgmres(L, Q.dot(y), tol=1.e-12)[0]
     
     @staticmethod
