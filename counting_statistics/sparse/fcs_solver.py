@@ -4,7 +4,6 @@ Created on 19 Jan 2017
 @author: richard
 '''
 import numpy as np
-import scipy.linalg as la
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
@@ -19,6 +18,17 @@ class FCSSolver(object):
 
         self.__watch_variables = ['L', 'jump_op', 'pops']
         self.__cache_is_stale = True
+        
+    def __setattr__(self, name, value):
+        '''Overridden to watch selected variables to trigger cache refresh.'''
+        try:
+            if name in self.__watch_variables:
+                self.__cache_is_stale = True
+        except AttributeError:
+            # stop an Error being thrown when self.__watch_variables is first created on class instantiation
+            # maybe throw a warning here?
+            pass
+        object.__setattr__(self, name, value)
         
     def refresh_cache(self):
         '''Refresh necessary quantities for counting statistics calculations.'''
@@ -46,8 +56,9 @@ class FCSSolver(object):
         L is time-local generator of open system dynamics
         Q is operator projecting onto space orthogonal to steady state
         y is vector or matrix being operated on by pseudoinverse'''
-        x = spla.lgmres(L, Q.dot(y))
-        return x[0]
+        result = spla.lgmres(L, Q.dot(y), tol=1.e-5, maxiter=10000)
+        print(result)
+        return result[0] # spla.lgmres(L, Q.dot(y), tol=1.e-12)[0]
     
     @staticmethod
     def Q(L, steady_state, pops):

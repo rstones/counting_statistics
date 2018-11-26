@@ -3,7 +3,7 @@ import numpy.linalg as npla
 import scipy.linalg as la
 import scipy.special as sp
 from counting_statistics.lindblad_system import LindbladSystem
-from counting_statistics import optimized_funcs
+#from counting_statistics import optimized_funcs
 
 class FCSSolver(LindbladSystem):
     '''
